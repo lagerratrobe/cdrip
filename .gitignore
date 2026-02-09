@@ -1,2 +1,5 @@
 venv/
 Scratch/
+*.wav
+__pycache__/
+
