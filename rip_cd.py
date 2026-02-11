@@ -1,37 +1,9 @@
 import os
 import subprocess
-from mutagen.flac import FLAC
 
-
-def clean(text):
-    """Strip whitespace, carriage returns, and collapse double spaces."""
-    return ' '.join(text.split())
-
-
-def title_case(text):
-    """Capitalize the first letter of each word, preserving internal casing."""
-    def cap_word(word):
-        for i, char in enumerate(word):
-            if char.isalpha():
-                return word[:i] + char.upper() + word[i+1:]
-        return word
-    return ' '.join(cap_word(word) for word in text.split(' '))
-
-
-def is_compilation(artist):
-    return clean(artist).lower() in ('various', 'various artists')
-
-
-def parse_compilation_track(track_str):
-    """Parse 'Artist / Title' or 'Artist - Title' from a compilation track."""
-    track = clean(track_str)
-    if ' / ' in track:
-        artist, title = track.split(' / ', 1)
-        return artist, title
-    elif ' - ' in track:
-        artist, title = track.split(' - ', 1)
-        return artist, title
-    return None, track
+from text_utils import clean, title_case, is_compilation, parse_compilation_track
+from scan_disc import read_disc, query_gnudb, read_gnudb
+from encode import prompt_genre, build_track_metadata, encode_track
 
 
 def generate_filenames(disc_data):
@@ -64,51 +36,58 @@ def generate_filenames(disc_data):
     return folder, track_files
 
 
+def rip_track(track_number, output_file):
+    subprocess.run(["cdparanoia", str(track_number), output_file], check=True)
+
+
+def rip_disc(output_dir):
+    freedb_id, musicbrainz_id, num_tracks, offsets, total_sectors = read_disc()
+    category, gnudb_id = query_gnudb(freedb_id, num_tracks, offsets, total_sectors)
+    artist, album, year, genre, tracks = read_gnudb(category, gnudb_id)
+
+    disc_data = {
+        "freedb_id": freedb_id,
+        "musicbrainz_id": musicbrainz_id,
+        "category": category,
+        "artist": artist,
+        "album": album,
+        "year": year,
+        "genre": genre,
+        "num_tracks": num_tracks,
+        "offsets": offsets,
+        "tracks": tracks}
+
+    print(f"\n{artist} - {album} ({year}) [{genre}] — {num_tracks} tracks\n")
+
+    if not year.strip():
+        year = input("Year: ").strip()
+        disc_data["year"] = year
+
+    chosen_genre = prompt_genre(genre)
+
+    folder, track_filenames = generate_filenames(disc_data)
+    album_dir = os.path.join(output_dir, folder)
+    os.makedirs(album_dir, exist_ok=True)
+
+    for i, flac_name in enumerate(track_filenames, start=1):
+        print(f"[{i}/{num_tracks}] Ripping {tracks[i-1]}...")
+        wav_path = os.path.join(album_dir, f"track{i:02d}.wav")
+        flac_path = os.path.join(album_dir, flac_name)
+        rip_track(i, wav_path)
+        metadata = build_track_metadata(disc_data, i - 1, chosen_genre)
+        encode_track(wav_path, flac_path, metadata)
+        os.remove(wav_path)
+
+    print(f"\nDone: {album_dir}")
+    subprocess.run(["eject", "/dev/cdrom"])
+
+
 if __name__ == "__main__":
-    raw = ['John Doan - Amazing Grace (Part)\r',
-           'Paul McCandless - Maria Walks Among the Thorns\r',
-           'David Darling - Colorado Blue\r',
-           'John Doan - Amazing Grace\r',
-           'Will Ackerman - Impending Death of the Virgin Spirit\r',
-           'Soulfood & Billy McLaughlin - The White Bear\r',
-           'Tim Story - Caranna\r',
-           "John Boswell - I'll Carry You Through\r",
-           'John Boswell - Leaf Dream\r',
-           'Liz Story - Blessings\r',
-           'Bill Douglas - Autumn Song\r',
-           'George Winston - What Are the Signs\r',
-           "Michael Manring - Year's End\r"]
-
-    tracks = [tuple(item.strip().split(" - ", 1)) for item in raw]
-
-    album = "Best of Hearts of Space, No. 3 Innocence"
-    year = "2009"
-    genre = "New Age"
-    output_dir = "./Scratch"
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    for i, (artist, title) in enumerate(tracks, start=1):
-        wav_file = os.path.join(output_dir, f"track{i:02d}.wav")
-        flac_file = os.path.join(output_dir, f"{i:02d} - {artist} - {title}.flac")
-
-        # Rip
-        subprocess.run(["cdparanoia", str(i), wav_file], check=True)
-
-        # Encode
-        subprocess.run(["flac", "--best", "-o", flac_file, wav_file], check=True)
-
-        # Tag
-        audio = FLAC(flac_file)
-        audio["title"] = title
-        audio["artist"] = artist
-        audio["album"] = album
-        audio["albumartist"] = "Various"
-        audio["date"] = year
-        audio["genre"] = genre
-        audio["tracknumber"] = str(i)
-        audio["totaltracks"] = str(len(tracks))
-        audio.save()
-
-        # Clean up WAV
-        os.remove(wav_file)
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Rip a CD to FLAC files with metadata from GnuDB.")
+    parser.add_argument(
+        "output_dir", nargs="?", default=".",
+        help="directory to write album folder into (default: current directory)")
+    args = parser.parse_args()
+    rip_disc(args.output_dir)

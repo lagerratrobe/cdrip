@@ -1,30 +1,5 @@
-import json
-import pytest
-from rip_cd import generate_filenames, is_compilation
-
-
-def load_disc_data(filename="disc_data.json"):
-    decoder = json.JSONDecoder()
-    discs = []
-    with open(filename) as f:
-        content = f.read().strip()
-    while content:
-        obj, idx = decoder.raw_decode(content)
-        discs.append(obj)
-        content = content[idx:].strip()
-    return discs
-
-
-DISCS = load_disc_data()
-
-
-def disc_label(disc):
-    return f"{disc['artist'].strip()} - {disc['album'].strip()}"
-
-
-@pytest.fixture(params=DISCS, ids=disc_label)
-def disc(request):
-    return request.param
+from rip_cd import generate_filenames
+from text_utils import is_compilation
 
 
 def test_no_carriage_returns(disc):
@@ -44,7 +19,7 @@ def test_folder_is_artist_dash_album(disc):
 
 def test_compilation_folder_says_various_artists(disc):
     if not is_compilation(disc['artist']):
-        pytest.skip("not a compilation")
+        return
     folder, _ = generate_filenames(disc)
     assert folder.startswith("Various Artists - "), f"Compilation folder should start with 'Various Artists': {folder}"
 
