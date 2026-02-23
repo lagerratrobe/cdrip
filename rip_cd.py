@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from text_utils import clean, title_case, is_compilation, parse_compilation_track
-from scan_disc import read_disc, query_gnudb, read_gnudb
+from scan_disc import read_disc, query_gnudb, read_gnudb, search_musicbrainz
 from encode import prompt_genre, build_track_metadata, encode_track
 
 
@@ -42,8 +42,17 @@ def rip_track(track_number, output_file):
 
 def rip_disc(output_dir):
     freedb_id, musicbrainz_id, num_tracks, offsets, total_sectors = read_disc()
-    category, gnudb_id = query_gnudb(freedb_id, num_tracks, offsets, total_sectors)
-    artist, album, year, genre, tracks = read_gnudb(category, gnudb_id)
+
+    try:
+        category, gnudb_id = query_gnudb(freedb_id, num_tracks, offsets, total_sectors)
+        artist, album, year, genre, tracks = read_gnudb(category, gnudb_id)
+        gnudb_ok = True
+    except Exception as e:
+        print(f"\nCould not read disc info from GnuDB: {e}")
+        category, gnudb_id = "", ""
+        artist, album, year, genre = "", "", "", ""
+        tracks = [f"Track {i:02d}" for i in range(1, num_tracks + 1)]
+        gnudb_ok = False
 
     disc_data = {
         "freedb_id": freedb_id,
@@ -58,6 +67,25 @@ def rip_disc(output_dir):
         "tracks": tracks}
 
     print(f"\n{artist} - {album} ({year}) [{genre}] — {num_tracks} tracks\n")
+
+    if not artist.strip():
+        artist = input("Artist: ").strip()
+        disc_data["artist"] = artist
+        album = input("Album: ").strip()
+        disc_data["album"] = album
+
+    if not gnudb_ok:
+        print("Searching MusicBrainz for track listing...")
+        mb_tracks, mb_year = search_musicbrainz(artist, album)
+        if mb_tracks:
+            tracks = mb_tracks
+            disc_data["tracks"] = tracks
+            print(f"Found {len(tracks)} tracks on MusicBrainz.")
+        else:
+            print("No MusicBrainz results found; track names will be placeholders.")
+        if mb_year and not year:
+            year = mb_year
+            disc_data["year"] = year
 
     if not year.strip():
         year = input("Year: ").strip()

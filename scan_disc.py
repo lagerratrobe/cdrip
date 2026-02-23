@@ -1,6 +1,8 @@
 import json
+import time
 import discid
 import urllib.request
+import urllib.parse
 
 
 def read_disc():
@@ -54,6 +56,42 @@ def read_gnudb(category, gnudb_id):
                         key=lambda k: int(k[6:]))
     tracks = [fields[k].strip() for k in track_keys]
     return artist, album, year, genre, tracks
+
+
+def search_musicbrainz(artist, album):
+    """Search MusicBrainz for a release by artist and album.
+
+    Returns (tracks, year) on success, or (None, None) if nothing found.
+    """
+    base = "https://musicbrainz.org/ws/2"
+    headers = {"User-Agent": "cdrip/0.1 (https://github.com/lagerratrobe/cdrip)"}
+
+    query = f'artist:"{artist}" AND release:"{album}"'
+    search_url = f"{base}/release?query={urllib.parse.quote(query)}&fmt=json&limit=1"
+    req = urllib.request.Request(search_url, headers=headers)
+    response = urllib.request.urlopen(req)
+    data = json.loads(response.read().decode("utf-8"))
+
+    releases = data.get("releases", [])
+    if not releases:
+        return None, None
+
+    mbid = releases[0]["id"]
+    year = releases[0].get("date", "")[:4]
+
+    time.sleep(1)  # MusicBrainz rate limit
+
+    release_url = f"{base}/release/{mbid}?inc=recordings&fmt=json"
+    req = urllib.request.Request(release_url, headers=headers)
+    response = urllib.request.urlopen(req)
+    release = json.loads(response.read().decode("utf-8"))
+
+    tracks = []
+    for medium in release.get("media", []):
+        for track in medium.get("tracks", []):
+            tracks.append(track["title"])
+
+    return tracks, year
 
 
 def append_to_file(data, filename="disc_data.json"):
