@@ -44,7 +44,10 @@ def read_gnudb(category, gnudb_id):
         key, _, value = line.partition("=")
         fields[key] = value
     dtitle = fields["DTITLE"].strip()
-    artist, album = dtitle.split(" / ", 1)
+    if " / " in dtitle:
+        artist, album = dtitle.split(" / ", 1)
+    else:
+        artist, album = "", dtitle
     year = fields.get("DYEAR", "").strip()
     genre = fields.get("DGENRE", "").strip()
     track_keys = sorted([k for k in fields if k.startswith("TTITLE")],
