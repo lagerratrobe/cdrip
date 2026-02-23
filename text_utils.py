@@ -3,6 +3,11 @@ def clean(text):
     return ' '.join(text.split())
 
 
+def sanitize_filename(text):
+    """Replace characters that are illegal or problematic in filenames."""
+    return text.replace('/', '-').replace('\x00', '')
+
+
 def title_case(text):
     """Capitalize the first letter of each word, preserving internal casing."""
     def cap_word(word):

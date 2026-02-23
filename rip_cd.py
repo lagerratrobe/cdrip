@@ -1,7 +1,8 @@
+import json
 import os
 import subprocess
 
-from text_utils import clean, title_case, is_compilation, parse_compilation_track
+from text_utils import clean, sanitize_filename, title_case, is_compilation, parse_compilation_track
 from scan_disc import read_disc, query_gnudb, read_gnudb, search_musicbrainz
 from encode import prompt_genre, build_track_metadata, encode_track
 
@@ -19,7 +20,7 @@ def generate_filenames(disc_data):
     else:
         folder_artist = artist
 
-    folder = f"{folder_artist} - {album}"
+    folder = sanitize_filename(f"{folder_artist} - {album}")
 
     track_files = []
     for i, track_str in enumerate(disc_data['tracks'], start=1):
@@ -30,7 +31,7 @@ def generate_filenames(disc_data):
         else:
             track_artist = artist
             title = title_case(clean(track_str))
-        filename = f"{track_artist} - {i:02d} - {title}.flac"
+        filename = sanitize_filename(f"{track_artist} - {i:02d} - {title}.flac")
         track_files.append(filename)
 
     return folder, track_files
@@ -40,7 +41,7 @@ def rip_track(track_number, output_file):
     subprocess.run(["cdparanoia", str(track_number), output_file], check=True)
 
 
-def rip_disc(output_dir):
+def rip_disc(output_dir, metadata_only=False):
     freedb_id, musicbrainz_id, num_tracks, offsets, total_sectors = read_disc()
 
     try:
@@ -91,6 +92,20 @@ def rip_disc(output_dir):
         year = input("Year: ").strip()
         disc_data["year"] = year
 
+    if metadata_only:
+        metadata_path = os.path.join(output_dir, "disc_metadata.json")
+        os.makedirs(output_dir, exist_ok=True)
+        with open(metadata_path, "w") as f:
+            json.dump({
+                "artist": disc_data["artist"],
+                "album": disc_data["album"],
+                "year": disc_data["year"],
+                "genre": disc_data["genre"],
+                "tracks": disc_data["tracks"]}, f, indent=2)
+            f.write("\n")
+        print(f"Wrote {metadata_path}")
+        return
+
     chosen_genre = prompt_genre(genre)
 
     folder, track_filenames = generate_filenames(disc_data)
@@ -117,5 +132,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "output_dir", nargs="?", default=".",
         help="directory to write album folder into (default: current directory)")
+    parser.add_argument(
+        "--metadata-only", action="store_true",
+        help="fetch metadata and write disc_metadata.json without ripping")
     args = parser.parse_args()
-    rip_disc(args.output_dir)
+    rip_disc(args.output_dir, metadata_only=args.metadata_only)
