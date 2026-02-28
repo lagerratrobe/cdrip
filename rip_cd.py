@@ -72,8 +72,9 @@ def rip_disc(output_dir, metadata_only=False):
     if not artist.strip():
         artist = input("Artist: ").strip()
         disc_data["artist"] = artist
-        album = input("Album: ").strip()
-        disc_data["album"] = album
+
+    album = input(f"Album [{album}]: ").strip() or album
+    disc_data["album"] = album
 
     if not gnudb_ok:
         print("Searching MusicBrainz for track listing...")

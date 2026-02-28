@@ -85,7 +85,6 @@ if __name__ == "__main__":
     encode_parser.add_argument(
         "output_dir", nargs="?", default=".",
         help="directory to write album folder into (default: current directory)")
-
     args = parser.parse_args()
     if args.command == "init":
         init_metadata(args.wav_folder)

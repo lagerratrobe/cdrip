@@ -11,10 +11,27 @@ Insert a disc and run:
 python rip_cd.py /path/to/music
 ```
 
-This reads the disc, queries GnuDB for metadata, prompts you to pick a genre,
-then rips and encodes each track to FLAC. The album folder is created under the
-output directory (defaults to the current directory if omitted). The disc is
-ejected when finished.
+This reads the disc and queries GnuDB for metadata. It then walks you through
+a short confirmation flow before ripping:
+
+- **Artist** — prompted only if GnuDB couldn't identify the disc
+- **Album** — always shown with the GnuDB value; press Enter to accept or type a correction
+- **Year** — prompted only if missing from GnuDB; if GnuDB fails entirely,
+  MusicBrainz is searched automatically for track names and year
+- **Genre** — interactive numbered menu with the GnuDB genre shown as a hint
+
+After confirmation it rips and encodes each track to FLAC. The album folder is
+created under the output directory (defaults to the current directory if
+omitted). The disc is ejected when finished.
+
+To fetch and save metadata without ripping (useful for checking what GnuDB
+returns), add `--metadata-only`:
+
+```bash
+python rip_cd.py --metadata-only /path/to/music
+```
+
+This writes a `disc_metadata.json` to the output directory and exits.
 
 ### Encode existing WAV files
 
